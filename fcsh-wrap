@@ -11,9 +11,12 @@ import sys
 import time
 import hashlib
 import subprocess
+import shlex
 
-FCSH_COMMAND = os.environ.get('FCSH') or 'fcsh'
+FCSH_COMMAND = os.environ.get('FCSH', 'fcsh')
 
+COMPILE_ERROR_STATUS = 1
+NO_FCSH_STATUS = 2
 
 # If true, supress the Recompile: and Reason: notes printed by fcsh.
 # WARNING: Heuristic is weak. May suppress overzealously.
@@ -79,9 +82,16 @@ def main():
       print "*** backgrounding"
       fifo = open(fifofile, 'w')
       print '*** starting fcsh child'
-      process = subprocess.Popen(FCSH_COMMAND, shell=True, bufsize=1,
-                                 stdin=subprocess.PIPE, stdout=fifo,
-                                 stderr=subprocess.STDOUT, close_fds=True)
+
+      try:
+         process = subprocess.Popen(shlex.split(FCSH_COMMAND), bufsize=1,
+                                    stdin=subprocess.PIPE, stdout=fifo,
+                                    stderr=subprocess.STDOUT, close_fds=True)
+      except OSError:
+         os.unlink(fifofile)
+         msg = '(fcsh) \nerror: fcsh command \'%s\' not found\n(fcsh) '
+         fifo.write(msg % FCSH_COMMAND)
+         sys.exit()
       (fcsh_in, fcsh_out) = (process.stdin, fifo)
       
       compatibility_arg = '-compatibility-version=%i.0.0' % flex_version
@@ -137,14 +147,16 @@ def dumpstartup (fp):
 
 def dump(fp):
    ignore_till_newline = False
-   failed = False
+   status = 0
    chars = list()
    while ''.join(chars) != '(fcsh) ':
       if (len(chars) == 7):
          if (LESS_CHATTER and ''.join(chars) in ('Reason:', 'Recompi')):
             ignore_till_newline = True
          if ''.join(chars) == 'Error: ':
-            failed = True
+            status = COMPILE_ERROR_STATUS
+         elif ''.join(chars) == 'error: ':
+            status = NO_FCSH_STATUS
          c = chars.pop(0)
          if (not ignore_till_newline):
             sys.stdout.write(c)
@@ -152,7 +164,7 @@ def dump(fp):
             ignore_till_newline = False
       chars.append(fp.read(1))
       assert (len(chars) <= 7)
-   return (1 if failed else 0)
+   return status
 
 
 def pid_from_file(filename):

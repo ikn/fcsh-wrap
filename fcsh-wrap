@@ -44,7 +44,7 @@ def main():
    
    mxmlc_args = sys.argv[1:]
    
-   md5sum = hashlib.md5('_'.join(mxmlc_args)).hexdigest();
+   md5sum = hashlib.md5(FCSH_COMMAND + '_'.join(mxmlc_args)).hexdigest();
    pidfile = '.FW.pid.%s' % (md5sum)
    donefile = '.FW.done.%s' % (md5sum)
    fifofile = '.FW.fifo.%s' % (md5sum)
